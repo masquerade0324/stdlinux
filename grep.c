@@ -2,21 +2,48 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <regex.h>
+#define _GNU_SOURCE
+#include <getopt.h>
 
-static void do_grep(regex_t *pat, FILE *src);
+static void do_grep(regex_t *pat, FILE *src, int v_opt);
 
 int main(int argc, char *argv[])
 {
     regex_t pat;
     int err;
     int i;
+    int opt;
+    int i_opt = 0;
+    int v_opt = 0;
 
-    if (argc < 2) {
+    while ((opt = getopt(argc, argv, "iv")) != -1) {
+        switch (opt) {
+        case 'i':
+            i_opt = 1;
+            break;
+        case 'v':
+            v_opt = 1;
+            break;
+        case '?':
+            fprintf(stderr, "Usage: %s [-i] [-v] [FILE ...]\n", argv[0]);
+            exit(1);
+        }
+    }
+
+    argc -= optind;
+    argv += optind;
+
+    if (argc < 1) {
         fputs("no pattern\n", stderr);
         exit(1);
     }
 
-    err = regcomp(&pat, argv[1], REG_EXTENDED | REG_NOSUB | REG_NEWLINE);
+    if (i_opt) {
+        err = regcomp(&pat, argv[0], REG_EXTENDED | REG_NOSUB | REG_NEWLINE | REG_ICASE);
+    } else {
+        err = regcomp(&pat, argv[0], REG_EXTENDED | REG_NOSUB | REG_NEWLINE);
+    }
+
     if (err != 0) {
         char buf[1024];
 
@@ -24,10 +51,10 @@ int main(int argc, char *argv[])
         puts("buf");
     }
 
-    if (argc == 2) {
-        do_grep(&pat, stdin);
+    if (argc == 1) {
+        do_grep(&pat, stdin, v_opt);
     } else {
-        for (i = 2; i < argc; i++) {
+        for (i = 1; i < argc; i++) {
             FILE *f;
 
             f = fopen(argv[i], "r");
@@ -35,7 +62,7 @@ int main(int argc, char *argv[])
                 perror(argv[i]);
                 exit(1);
             }
-            do_grep(&pat, f);
+            do_grep(&pat, f, v_opt);
             fclose(f);
         }
     }
@@ -44,13 +71,21 @@ int main(int argc, char *argv[])
     exit (0);
 }
 
-static void do_grep(regex_t *pat, FILE *src)
+static void do_grep(regex_t *pat, FILE *src, int v_opt)
 {
     char buf[4096];
 
-    while (fgets(buf, sizeof buf, src)) {
-        if (regexec(pat, buf, 0, NULL, 0) == 0) {
-            fputs(buf, stdout);
+    if (!v_opt) {
+        while (fgets(buf, sizeof buf, src)) {
+            if (regexec(pat, buf, 0, NULL, 0) == 0) {
+                fputs(buf, stdout);
+            }
+        }
+    } else {
+        while (fgets(buf, sizeof buf, src)) {
+            if (regexec(pat, buf, 0, NULL, 0) != 0) {
+                fputs(buf, stdout);
+            }
         }
     }
 }
